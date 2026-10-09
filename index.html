@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>Московский марафон 2026 — результаты</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<div id="app">
+  <header class="masthead">
+    <h1>МОСКОВСКИЙ МАРАФОН 2026</h1>
+    <svg class="marathon-heart" viewBox="0 0 40 36" aria-hidden="true"><path fill="#ffd333" d="M20 33C12 29 1 21 1 12A11 11 0 0 1 20 5Z"/><path fill="#ed1740" d="M20 33V5A11 11 0 0 1 39 12C39 21 28 29 20 33Z"/><circle cx="11" cy="11" r="4" fill="white"/><circle cx="29" cy="11" r="4" fill="white"/></svg>
+  </header>
+  <main>
+    <div v-cloak>
+      <p v-if="loading" class="state" role="status">Загружаем результаты…</p>
+      <p v-else-if="error" class="state state-error" role="alert">{{ error }}</p>
+      <template v-else>
+        <section class="dashboard-top" aria-label="Статистика всех участников">
+          <div class="overview">
+            <p class="edition-number">2026</p><p class="edition-caption">42,195 км</p>
+            <p class="total-count">{{ formatCount(stats.total) }}</p><p class="total-caption">участников</p>
+            <p class="gender-stat male"><span>{{ formatCount(stats.men) }} мужчин</span> <small>{{ formatShare(stats.men) }}</small></p>
+            <p class="gender-stat female"><span>{{ formatCount(stats.women) }} женщин</span> <small>{{ formatShare(stats.women) }}</small></p>
+            <p class="age-range">от {{ stats.minAge }} до {{ stats.maxAge }} лет</p>
+            <p class="sample-note">{{ formatCount(eliteCount) }} элита · {{ formatCount(amateurCount) }} любители</p>
+          </div>
+          <section class="age-section" aria-labelledby="age-title">
+            <h2 id="age-title">По возрасту и полу</h2><div ref="ageChart" class="age-chart"></div>
+            <p class="chart-caption"><span class="male-text">Мужчины</span> / <span class="female-text">женщины</span> · один ряд — один возраст</p>
+          </section>
+          <section class="countries-section" aria-labelledby="countries-title">
+            <h2 id="countries-title">По странам</h2>
+            <ol class="country-list"><li v-for="country in stats.countries.slice(0, 5)" :key="country.country" :title="country.label + ': ' + formatCount(country.count) + ' участников'">
+              <span class="country-name">{{ country.label }}</span><span class="country-count">{{ formatCount(country.count) }}</span><span class="country-share">{{ formatPercent(country.share) }}</span>
+            </li></ol>
+            <p class="other-countries" :title="otherCountries">{{ otherCountrySummary }} — вместе {{ formatPercent(otherCountryCount / stats.total * 100) }}.</p>
+          </section>
+          <section class="leaders-section" aria-labelledby="leaders-title">
+            <h2 id="leaders-title">Самые быстрые</h2><p class="leaders-caption">Топ-3 мужчин и женщин по времени</p>
+            <ol class="leader-list"><li v-for="runner in stats.leaders" :key="runner.class + ':' + runner.bibNumber" :class="runner.gender === 'M' ? 'leader-male' : 'leader-female'">
+              <a :href="runner.resultUrl" target="_blank" rel="noopener noreferrer" @mouseenter="showLeader($event, runner)" @focus="showLeader($event, runner)" @mouseleave="hideTooltip" @blur="hideTooltip">
+                <span class="leader-rank">{{ runner.rank }}</span><span class="leader-name">{{ runner.name }}</span><span class="leader-time">{{ formatTime(runner.seconds) }}</span>
+              </a>
+            </li></ol>
+            <div class="finish-summary"><strong>{{ formatCount(stats.finishers.length) }}</strong><span>с временем финиша</span></div>
+            <p class="status-note" title="DNF — не завершил дистанцию; DQ — дисквалификация">{{ formatCount(stats.dnf) }} DNF · {{ formatCount(stats.dq) }} DQ</p>
+          </section>
+        </section>
+        <section class="finish-section" aria-labelledby="finish-title">
+          <div class="finish-heading"><h2 id="finish-title">Распределение на финише</h2><p>Одна чёрточка — один спортсмен</p></div>
+          <div class="finish-chart-scroll"><div ref="finishChart" class="finish-chart"></div></div>
+          <p class="finish-caption"><span class="female-text">Женщины снизу</span>, <span class="male-text">мужчины сверху</span>; внутри каждой минуты и пола возраст растёт снизу вверх. Светлее — старше. DNF и DQ не включены.</p>
+        </section>
+        <section class="results-panel" aria-labelledby="results-title">
+          <div class="table-toolbar"><div><h2 id="results-title">Таблица бегунов</h2><p>{{ formatCount(rangeStart) }}–{{ formatCount(rangeEnd) }} из {{ formatCount(runners.length) }} участников</p></div><span class="page-size">100 на странице</span></div>
+          <div class="table-scroll" tabindex="0" role="region" aria-label="Результаты участников, таблица с горизонтальной прокруткой">
+            <table>
+              <caption class="sr-only">Место в классе, имя, стартовый номер, класс, страна, пол, возраст, темп и результат. Имя ведёт на результат участника.</caption>
+              <thead><tr><th scope="col" class="number-column">Место в классе</th><th scope="col">Участник</th><th scope="col" class="number-column">Номер</th><th scope="col">Класс</th><th scope="col">Страна</th><th scope="col">Пол</th><th scope="col" class="number-column">Возраст</th><th scope="col" class="number-column">Темп, мин/км</th><th scope="col" class="time-column">Результат</th></tr></thead>
+              <tbody><tr v-for="runner in pageRunners" :key="runner.class + ':' + runner.bibNumber">
+                <td class="place-cell">{{ runner.place }}</td>
+                <td class="name-cell"><a :href="runner.resultUrl" target="_blank" rel="noopener noreferrer">{{ runner.name }}</a></td>
+                <td class="bib-cell">{{ runner.bibNumber }}</td>
+                <td><span class="class-badge" :class="{ 'class-elite': runner.class === 'elite' }">{{ runner.class === 'elite' ? 'Элита' : 'Любитель' }}</span></td>
+                <td class="country-cell">{{ countryLabel(runner.country) }}</td><td>{{ runner.gender === 'M' ? 'М' : 'Ж' }}</td>
+                <td class="number-column">{{ runner.age }}</td><td class="pace-cell">{{ runner.pace }}</td>
+                <td class="time-column result-cell" :class="{ 'result-status': parseTime(runner.finishTime) === null }">{{ parseTime(runner.finishTime) === null ? runner.finishTime : formatTime(parseTime(runner.finishTime)) }}</td>
+              </tr></tbody>
+            </table>
+          </div>
+          <nav class="pagination" aria-label="Страницы результатов"><span class="pagination-info">Страница {{ page }} из {{ totalPages }}</span>
+            <div class="page-buttons">
+              <button type="button" :disabled="page === 1" @click="goToPage(page - 1)" aria-label="Предыдущая страница">←</button>
+              <template v-for="(item, index) in pageItems" :key="index"><span v-if="item === '…'" class="page-ellipsis" aria-hidden="true">…</span><button v-else type="button" :class="{ active: item === page }" :aria-current="item === page ? 'page' : undefined" :aria-label="'Страница ' + item" @click="goToPage(item)">{{ item }}</button></template>
+              <button type="button" :disabled="page === totalPages" @click="goToPage(page + 1)" aria-label="Следующая страница">→</button>
+            </div>
+          </nav>
+        </section>
+      </template>
+      <div v-if="tooltip" class="chart-tooltip" :class="tooltip.kind === 'age' ? 'age-tooltip' : 'runner-tooltip'" :style="tooltipStyle" role="tooltip">
+        <template v-if="tooltip.kind === 'age'"><div class="tooltip-header">{{ tooltip.title }}</div><div class="tooltip-count">{{ formatCount(tooltip.count) }} <span>участников</span></div></template>
+        <template v-else>
+          <div class="tooltip-header">{{ tooltip.runner.name }}<span>{{ ageLabel(tooltip.runner.age) }} · {{ tooltip.runner.gender === 'M' ? 'мужчина' : 'женщина' }}</span></div>
+          <div class="tooltip-time">{{ formatTime(tooltip.runner.seconds) }}</div>
+          <div class="tooltip-details">{{ countryLabel(tooltip.runner.country) }} · {{ tooltip.runner.class === 'elite' ? 'элита' : 'любитель' }}<br />Место в классе: {{ tooltip.runner.place }}</div>
+          <div class="tooltip-bib">№ {{ tooltip.runner.bibNumber }}</div>
+        </template>
+      </div>
+    </div>
+    <noscript><p class="state">Для отображения дашборда включите JavaScript.</p></noscript>
+  </main>
+  <footer><span>МОСКОВСКИЙ МАРАФОН · 2026</span><span>Данные: Running Community</span></footer>
+</div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
